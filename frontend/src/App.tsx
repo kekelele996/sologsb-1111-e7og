@@ -15,6 +15,7 @@ import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
 import { useLithoStore } from './stores/lithoStore';
+import { useLoanStore } from './stores/loanStore';
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -35,6 +36,7 @@ export default function App() {
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
+  const hydrateLoans = useLoanStore((s) => s.hydrate);
   const location = useLocation();
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function App() {
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos(), hydrateLoans()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
@@ -52,7 +54,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, hydrateLoans, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)

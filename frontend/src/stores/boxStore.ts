@@ -26,6 +26,8 @@ interface BoxState {
   removeBox: (id: string) => Promise<void>;
   /** 标记/取消破损格 */
   toggleDamagedSlot: (id: string, slot: number) => Promise<void>;
+  /** 归还时合并破损格（只增不删，不覆盖既有标记） */
+  mergeDamagedSlots: (id: string, slots: number[]) => Promise<void>;
 }
 
 /** 岩芯箱与格位分配 */
@@ -77,6 +79,15 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
     const damagedSlots = current.damagedSlots.includes(slot)
       ? current.damagedSlots.filter((s) => s !== slot)
       : [...current.damagedSlots, slot].sort((a, b) => a - b);
+    const next: CoreBox = { ...current, damagedSlots };
+    await db.boxes.put(next);
+    set({ boxes: get().boxes.map((b) => (b.id === id ? next : b)) });
+  },
+
+  mergeDamagedSlots: async (id, slots) => {
+    const current = get().boxes.find((b) => b.id === id);
+    if (!current || slots.length === 0) return;
+    const damagedSlots = Array.from(new Set([...current.damagedSlots, ...slots])).sort((a, b) => a - b);
     const next: CoreBox = { ...current, damagedSlots };
     await db.boxes.put(next);
     set({ boxes: get().boxes.map((b) => (b.id === id ? next : b)) });

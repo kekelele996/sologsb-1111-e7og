@@ -3,6 +3,7 @@ import type { DrillHole } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import type { CoreBox } from '../types/core-box';
 import type { LithoLog } from '../types/litho-log';
+import type { BoxLoan } from '../types/box-loan';
 import { footageOf, recoveryOf } from './recovery';
 
 const DAY = 86_400_000;
@@ -146,8 +147,16 @@ export const SEED_BOXES: CoreBox[] = [
   { id: 'box-007', boxNo: 'X-2401-01', holeId: 'hole-001', fromDepth: 0, toDepth: 26, slots: 11, slotLength: 2.5, boxedAt: daysAgo(22), shelfPos: 'C 区 1 架', damagedSlots: [], operator: '高振华' },
 ];
 
-export const SEED_LITHOS: LithoLog[] = [
-  { id: 'litho-001', holeId: 'hole-002', fromDepth: 0, toDepth: 8, lithology: '第四系覆盖层', color: '黄褐色', alteration: '无', mineralization: '无', rqd: 0, sampleNo: '', logger: '陈立', remark: '残坡积层' },
+export const SEED_LOANS: BoxLoan[] = [
+  // 已归还的历史记录：归还时登记的第 4 格破损即箱台账上的破损标记
+  { id: 'loan-001', boxId: 'box-002', borrower: '孙立新', purpose: '取样化验', loanedAt: daysAgo(30), dueAt: daysAgo(16), returnedAt: daysAgo(18), returnDamagedSlots: [4], returnRemark: '第 4 格岩芯破碎' },
+  // 在借且已逾期
+  { id: 'loan-002', boxId: 'box-005', borrower: '孙立新', purpose: '取样化验', loanedAt: daysAgo(12), dueAt: daysAgo(3) },
+  // 在借未逾期
+  { id: 'loan-003', boxId: 'box-007', borrower: '陈立', purpose: '岩矿鉴定', loanedAt: daysAgo(2), dueAt: daysAgo(-12) },
+];
+
+export const SEED_LITHOS: LithoLog[] = [  { id: 'litho-001', holeId: 'hole-002', fromDepth: 0, toDepth: 8, lithology: '第四系覆盖层', color: '黄褐色', alteration: '无', mineralization: '无', rqd: 0, sampleNo: '', logger: '陈立', remark: '残坡积层' },
   { id: 'litho-002', holeId: 'hole-002', fromDepth: 8, toDepth: 62, lithology: '花岗闪长岩', color: '灰白色', alteration: '绿泥石化', mineralization: '无', rqd: 82, sampleNo: 'YP-2402-01', logger: '陈立' },
   { id: 'litho-003', holeId: 'hole-002', fromDepth: 62, toDepth: 96, lithology: '矽卡岩', color: '暗绿色', alteration: '矽卡岩化', mineralization: '磁铁矿', rqd: 68, sampleNo: 'YP-2402-02', logger: '陈立', remark: '见稀疏浸染状磁铁矿' },
   { id: 'litho-004', holeId: 'hole-002', fromDepth: 96, toDepth: 132, lithology: '大理岩', color: '白色', alteration: '碳酸盐化', mineralization: '黄铜矿', rqd: 74, sampleNo: 'YP-2402-03', logger: '陈立', remark: '见细脉状黄铜矿' },
@@ -173,18 +182,20 @@ export async function seedIfEmpty(): Promise<void> {
   if (flag) {
     return;
   }
-  const [holeCount, runCount, boxCount, lithoCount] = await Promise.all([
+  const [holeCount, runCount, boxCount, lithoCount, loanCount] = await Promise.all([
     db.holes.count(),
     db.runs.count(),
     db.boxes.count(),
     db.lithos.count(),
+    db.loans.count(),
   ]);
 
-  await db.transaction('rw', db.holes, db.runs, db.boxes, db.lithos, db.meta, async () => {
+  await db.transaction('rw', [db.holes, db.runs, db.boxes, db.lithos, db.loans, db.meta], async () => {
     if (holeCount === 0) await db.holes.bulkPut(SEED_HOLES);
     if (runCount === 0) await db.runs.bulkPut(SEED_RUNS);
     if (boxCount === 0) await db.boxes.bulkPut(SEED_BOXES);
     if (lithoCount === 0) await db.lithos.bulkPut(SEED_LITHOS);
+    if (loanCount === 0) await db.loans.bulkPut(SEED_LOANS);
     await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
   });
 }

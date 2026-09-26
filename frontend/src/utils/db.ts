@@ -3,18 +3,20 @@ import type { DrillHole } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import type { CoreBox } from '../types/core-box';
 import type { LithoLog } from '../types/litho-log';
+import type { BoxLoan } from '../types/box-loan';
 
 /** IndexedDB 库名（浏览器本地存储，无后端） */
 export const DB_NAME = 'gbdrillcore-db';
 
 /** 当前 schema 版本，与 db.version(n) 对应 */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 class DrillCoreDB extends Dexie {
   holes!: Table<DrillHole, string>;
   runs!: Table<DrillRun, string>;
   boxes!: Table<CoreBox, string>;
   lithos!: Table<LithoLog, string>;
+  loans!: Table<BoxLoan, string>;
   meta!: Table<{ key: string; value: string }, string>;
 
   constructor() {
@@ -49,6 +51,11 @@ class DrillCoreDB extends Dexie {
             }
           });
       });
+
+    // v3：新增岩芯箱借阅台账表（loans），历史借还按箱保留，纯新增表无需回填。
+    this.version(3).stores({
+      loans: 'id, boxId, loanedAt, dueAt',
+    });
   }
 }
 
