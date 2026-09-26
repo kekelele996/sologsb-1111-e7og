@@ -7,6 +7,7 @@ import {
   ExperimentOutlined,
   ProfileOutlined,
   BarsOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { seedIfEmpty } from './utils/seed';
@@ -14,6 +15,7 @@ import { downloadText, exportBackupJson } from './utils/export';
 import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
+import { useLoanStore } from './stores/loanStore';
 import { useLithoStore } from './stores/lithoStore';
 
 const { Header, Sider, Content, Footer } = Layout;
@@ -24,6 +26,7 @@ const MENU_ITEMS = [
   { key: '/holes', icon: <DatabaseOutlined />, label: <Link to="/holes">钻孔台帐</Link> },
   { key: '/runs', icon: <BarsOutlined />, label: <Link to="/runs">回次记录</Link> },
   { key: '/boxes', icon: <ProfileOutlined />, label: <Link to="/boxes">岩芯箱</Link> },
+  { key: '/loans', icon: <SwapOutlined />, label: <Link to="/loans">借阅登记</Link> },
   { key: '/lithology', icon: <ExperimentOutlined />, label: <Link to="/lithology">岩性编录</Link> },
 ];
 
@@ -34,6 +37,7 @@ export default function App() {
   const hydrateHoles = useHoleStore((s) => s.hydrate);
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
+  const hydrateLoans = useLoanStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
   const location = useLocation();
 
@@ -42,7 +46,7 @@ export default function App() {
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLoans(), hydrateLithos()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
@@ -52,7 +56,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLoans, hydrateLithos, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)

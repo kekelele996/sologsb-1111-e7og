@@ -3,10 +3,13 @@ import type { DrillHole } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import type { CoreBox } from '../types/core-box';
 import type { LithoLog } from '../types/litho-log';
+import type { CoreLoan } from '../types/loan';
 import { footageOf, recoveryOf } from './recovery';
 
 const DAY = 86_400_000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY).toISOString();
+/** n 天后的 YYYY-MM-DD（负数表示几天前） */
+const dateOffset = (n: number) => new Date(Date.now() + n * DAY).toISOString().slice(0, 10);
 
 export const SEED_HOLES: DrillHole[] = [
   {
@@ -138,12 +141,73 @@ export const SEED_RUNS: DrillRun[] = buildRuns();
 
 export const SEED_BOXES: CoreBox[] = [
   { id: 'box-001', boxNo: 'X-2402-01', holeId: 'hole-002', fromDepth: 0, toDepth: 25, slots: 10, slotLength: 2.5, boxedAt: daysAgo(40), shelfPos: 'A 区 1 架', damagedSlots: [], operator: '高振华' },
-  { id: 'box-002', boxNo: 'X-2402-02', holeId: 'hole-002', fromDepth: 25, toDepth: 50, slots: 10, slotLength: 2.5, boxedAt: daysAgo(39), shelfPos: 'A 区 1 架', damagedSlots: [4], operator: '高振华', remark: '第 4 格岩芯破碎' },
+  { id: 'box-002', boxNo: 'X-2402-02', holeId: 'hole-002', fromDepth: 25, toDepth: 50, slots: 10, slotLength: 2.5, boxedAt: daysAgo(39), shelfPos: 'A 区 1 架', damagedSlots: [4, 9], operator: '高振华', remark: '第 4 格岩芯破碎；第 9 格为 09-12 借阅归还时补登' },
   { id: 'box-003', boxNo: 'X-2402-03', holeId: 'hole-002', fromDepth: 50, toDepth: 75, slots: 10, slotLength: 2.5, boxedAt: daysAgo(38), shelfPos: 'A 区 2 架', damagedSlots: [], operator: '周明' },
   { id: 'box-004', boxNo: 'X-2403-01', holeId: 'hole-003', fromDepth: 0, toDepth: 30, slots: 12, slotLength: 2.5, boxedAt: daysAgo(52), shelfPos: 'B 区 1 架', damagedSlots: [], operator: '周明' },
   { id: 'box-005', boxNo: 'X-2403-02', holeId: 'hole-003', fromDepth: 30, toDepth: 60, slots: 12, slotLength: 2.5, boxedAt: daysAgo(51), shelfPos: 'B 区 1 架', damagedSlots: [7, 8], operator: '周明', remark: '断层破碎带，两格岩芯缺失' },
   { id: 'box-006', boxNo: 'X-2404-01', holeId: 'hole-004', fromDepth: 0, toDepth: 28, slots: 12, slotLength: 2.5, boxedAt: daysAgo(30), shelfPos: 'B 区 2 架', damagedSlots: [], operator: '赵晓峰' },
   { id: 'box-007', boxNo: 'X-2401-01', holeId: 'hole-001', fromDepth: 0, toDepth: 26, slots: 11, slotLength: 2.5, boxedAt: daysAgo(22), shelfPos: 'C 区 1 架', damagedSlots: [], operator: '高振华' },
+];
+
+/**
+ * 借阅示例：同箱先借先还（重新借出保留旧记录）、归还登记破损格并入箱台账、
+ * 在借按期 / 在借逾期各一箱。
+ */
+export const SEED_LOANS: CoreLoan[] = [
+  {
+    id: 'loan-seed-001',
+    boxId: 'box-002',
+    boxNo: 'X-2402-02',
+    holeId: 'hole-002',
+    shelfPos: 'A 区 1 架',
+    borrower: '林婉',
+    purpose: '取样化验',
+    dueDate: dateOffset(-14),
+    borrowedAt: daysAgo(24),
+    registrar: '库管员',
+    returnedAt: daysAgo(16),
+    returnedDamagedSlots: [9],
+    receiver: '库管员',
+    returnRemark: '第 9 格岩芯磕碰破损，已并入箱台账',
+  },
+  {
+    id: 'loan-seed-002',
+    boxId: 'box-002',
+    boxNo: 'X-2402-02',
+    holeId: 'hole-002',
+    shelfPos: 'A 区 1 架',
+    borrower: '陈立',
+    purpose: '地质复查',
+    dueDate: dateOffset(3),
+    borrowedAt: daysAgo(4),
+    registrar: '库管员',
+    remark: '第二次借出，首次借阅记录仍保留',
+  },
+  {
+    id: 'loan-seed-003',
+    boxId: 'box-001',
+    boxNo: 'X-2402-01',
+    holeId: 'hole-002',
+    shelfPos: 'A 区 1 架',
+    borrower: '赵晓峰',
+    purpose: '对外展示',
+    dueDate: dateOffset(-3),
+    borrowedAt: daysAgo(12),
+    registrar: '库管员',
+    remark: '局里阶段成果展，已催还',
+  },
+  {
+    id: 'loan-seed-004',
+    boxId: 'box-004',
+    boxNo: 'X-2403-01',
+    holeId: 'hole-003',
+    shelfPos: 'B 区 1 架',
+    borrower: '吴倩',
+    purpose: '科研借阅',
+    dueDate: dateOffset(6),
+    borrowedAt: daysAgo(2),
+    registrar: '库管员',
+  },
 ];
 
 export const SEED_LITHOS: LithoLog[] = [
@@ -173,18 +237,20 @@ export async function seedIfEmpty(): Promise<void> {
   if (flag) {
     return;
   }
-  const [holeCount, runCount, boxCount, lithoCount] = await Promise.all([
+  const [holeCount, runCount, boxCount, lithoCount, loanCount] = await Promise.all([
     db.holes.count(),
     db.runs.count(),
     db.boxes.count(),
     db.lithos.count(),
+    db.loans.count(),
   ]);
 
-  await db.transaction('rw', db.holes, db.runs, db.boxes, db.lithos, db.meta, async () => {
+  await db.transaction('rw', [db.holes, db.runs, db.boxes, db.lithos, db.loans, db.meta], async () => {
     if (holeCount === 0) await db.holes.bulkPut(SEED_HOLES);
     if (runCount === 0) await db.runs.bulkPut(SEED_RUNS);
     if (boxCount === 0) await db.boxes.bulkPut(SEED_BOXES);
     if (lithoCount === 0) await db.lithos.bulkPut(SEED_LITHOS);
+    if (loanCount === 0) await db.loans.bulkPut(SEED_LOANS);
     await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
   });
 }

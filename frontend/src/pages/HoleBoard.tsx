@@ -2,22 +2,30 @@ import { useMemo } from 'react';
 import { Alert, Button, Card, Col, Progress, Row, Space, Table, Tag, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { Link } from 'react-router-dom';
+import dayjs from 'dayjs';
 import StatBadge from '../components/common/StatBadge';
 import RecoveryBadge from '../components/common/RecoveryBadge';
 import FilterBar from '../components/common/FilterBar';
+import LoanStatusTag from '../components/common/LoanStatusTag';
 import { useHoleFilter } from '../hooks/useHoleFilter';
 import { useHoleStore, holeProgressList } from '../stores/holeStore';
 import { useRunStore, anomalyList } from '../stores/runStore';
+import { useBoxStore } from '../stores/boxStore';
+import { useLoanStore } from '../stores/loanStore';
 import { RIG_NOS, SHIFTS, type HoleProgress } from '../types/drill-hole';
 import type { RunAnomaly } from '../types/drill-run';
+import type { CoreLoan } from '../types/loan';
+import { isActive, isOverdue, overdueDays } from '../utils/loan';
 import { isAnomaly } from '../utils/recovery';
 
 const { Title, Paragraph, Text } = Typography;
 
-/** 工作台：钻孔进度与采取率异常清单（低于 75% 标红） */
+/** 工作台：钻孔进度、采取率异常清单（低于 75% 标红）、在借与逾期箱 */
 export default function HoleBoard() {
   const holes = useHoleStore((s) => s.holes);
   const runs = useRunStore((s) => s.runs);
+  const boxes = useBoxStore((s) => s.boxes);
+  const loans = useLoanStore((s) => s.loans);
   const filter = useHoleFilter();
 
   const visibleHoles = useMemo(() => filter.apply(holes), [holes, filter]);
@@ -37,6 +45,10 @@ export default function HoleBoard() {
     const totalCore = runs.reduce((sum, run) => sum + run.coreLength, 0);
     return totalFootage > 0 ? Number(((totalCore / totalFootage) * 100).toFixed(1)) : 0;
   }, [runs]);
+
+  const boxNoOf = (boxId: string) => boxes.find((b) => b.id === boxId)?.boxNo;
+  const activeLoans = useMemo(() => loans.filter(isActive), [loans]);
+  const overdueLoans = useMemo(() => activeLoans.filter((loan) => isOverdue(loan)), [activeLoans]);
 
   const progressColumns: TableColumnsType<HoleProgress> = [
     { title: '孔号', width: 110, render: (_, row) => <Text strong>{row.hole.holeNo}</Text> },
@@ -90,6 +102,36 @@ export default function HoleBoard() {
     { title: '处置建议', render: (_, row) => <Text type="danger">{row.advice}</Text> },
   ];
 
+  const loanColumns: TableColumnsType<CoreLoan> = [
+    { title: '箱号', width: 120, render: (_, row) => <Text strong>{boxNoOf(row.boxId) ?? row.boxNo}</Text> },
+    { title: '孔号', width: 100, render: (_, row) => holeNoOf(row.holeId) },
+    { title: '领用人', dataIndex: 'borrower', width: 90 },
+    { title: '用途', dataIndex: 'purpose', width: 90 },
+    { title: '借出日期', width: 100, render: (_, row) => dayjs(row.borrowedAt).format('YYYY-MM-DD') },
+    {
+      title: '应还日期',
+      width: 160,
+      render: (_, row) => (
+        <Text type={isOverdue(row) ? 'danger' : undefined}>
+          {row.dueDate}
+          {overdueDays(row) > 0 ? `（逾期 ${overdueDays(row)} 天）` : ''}
+        </Text>
+      ),
+    },
+    { title: '状态', width: 120, render: (_, row) => <LoanStatusTag loan={row} /> },
+    {
+      title: '操作',
+      width: 110,
+      render: () => (
+        <Link to="/loans">
+          <Button size="small" type="link">
+            办理归还
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
   return (
     <div>
       <Title level={3} style={{ marginBottom: 4 }}>
@@ -101,13 +143,13 @@ export default function HoleBoard() {
       </Paragraph>
 
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8} lg={4}>
           <StatBadge label="在钻钻孔" value={inDrilling} unit="个" status="warning" />
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8} lg={4}>
           <StatBadge label="已终孔" value={finished} unit="个" status="success" />
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8} lg={4}>
           <StatBadge
             label="未达设计待补勘"
             value={supplement.length}
@@ -116,10 +158,51 @@ export default function HoleBoard() {
             hint="终孔深度小于设计孔深"
           />
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8} lg={4}>
           <StatBadge label="有效采取率" value={avgRecovery} unit="%" status={avgRecovery >= 75 ? 'success' : 'error'} hint="岩芯长度合计 / 进尺合计" />
         </Col>
+        <Col xs={12} md={8} lg={4}>
+          <StatBadge label="在借岩芯箱" value={activeLoans.length} unit="箱" status={activeLoans.length ? 'warning' : 'success'} hint="已借出尚未归还" />
+        </Col>
+        <Col xs={12} md={8} lg={4}>
+          <StatBadge label="逾期未还" value={overdueLoans.length} unit="箱" status={overdueLoans.length ? 'error' : 'success'} hint="超过应还日期仍未归还" />
+        </Col>
       </Row>
+
+      {overdueLoans.length > 0 ? (
+        <Alert
+          style={{ marginBottom: 16 }}
+          type="error"
+          showIcon
+          message={`借阅逾期提醒：${overdueLoans.length} 箱岩芯超过应还日期仍未归还，请尽快催还`}
+          description={
+            <Space wrap>
+              {overdueLoans.map((loan) => (
+                <Tag key={loan.id} color="red">
+                  {boxNoOf(loan.boxId) ?? loan.boxNo} · {loan.borrower} · 应还 {loan.dueDate}（逾期 {overdueDays(loan)} 天）
+                </Tag>
+              ))}
+            </Space>
+          }
+        />
+      ) : null}
+
+      <Card
+        size="small"
+        style={{ marginBottom: 16 }}
+        title={<span>在借岩芯箱{overdueLoans.length > 0 ? <Text type="danger">（{overdueLoans.length} 箱逾期）</Text> : null}</span>}
+        extra={<Link to="/loans"><Button size="small" type="primary">去借阅登记</Button></Link>}
+      >
+        <Table
+          rowKey={(row) => row.id}
+          size="small"
+          columns={loanColumns}
+          dataSource={[...activeLoans].sort((a, b) => b.dueDate.localeCompare(a.dueDate))}
+          pagination={{ pageSize: 5, hideOnSinglePage: true }}
+          scroll={{ x: 900 }}
+          locale={{ emptyText: '当前没有借出的岩芯箱' }}
+        />
+      </Card>
 
       {supplement.length > 0 ? (
         <Alert
